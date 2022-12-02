@@ -1,17 +1,12 @@
 #ifndef AOC_SHARED_H
 #define AOC_SHARED_H
 
-#if defined(_WIN32) || defined(_WIN64) 
-#define PathSeperator '\\'
-#define PathSeperatorOpp '/'
-#else
-#define PathSeperator '/'
-#define PathSeperatorOpp '\\'
-#endif
+global b32 aoc_should_print_solution_fluff = false;
+global b32 aoc_global_test2 = false;
 
 global string_list strings_from_args(char* args[], int argc) {
     string_list result = {0};
-    memory_arena arena = arena_create(global_crt_memory());
+    memory_arena arena = arena_create();
     for (int i = 0; i < argc; ++i) {
         string_list_push(&arena, &result, string_c(args[i]));
     }
@@ -26,31 +21,25 @@ global string_list strings_from_args(char* args[], int argc) {
        Runtime took %0.4ns
 
 */
+
 global int aoc_run_solutions(advent_solution** solutions, u64 solution_count, string_list args) {
     solutions; solution_count; args;
-    return 0;
-}
 
-#if 0
-global int aoc_run_solutions(aoc_days days, string_list args) {
-    args;
-    memory_arena arena = arena_create(global_crt_memory());
-    arena;
+    // TODO(@jax): 
+    
+    memory_arena arena = arena_create(); arena;
 
-    aoc_day_func** days_ptr = days.days;
-    u32 day_count = days.day_count; 
-    days_ptr[day_count] = 0;
+    buffer null_input = { 0 };
+    b32 is_single_solution = (solution_count==1); is_single_solution;
 
-    b32 single_day = (day_count == 1);
-    single_day;
-
-    aoc_day_func** ptr = days_ptr;
-    aoc_day_func* last_day = days_ptr[day_count - 1];
-    for (; *ptr <= last_day && *ptr;) {
-        aoc_day_func* current_day_func = *ptr;
+    advent_solution** ptr = solutions;
+    advent_solution* last_solution = solutions[solution_count-1];
+    for (; *ptr <= last_solution && *ptr;) {
+        advent_solution* solution = *ptr;
 
         string day_name = { 0 };
-        if (single_day) {
+        if (is_single_solution) {
+#if 0
             string name_temp = args.first->str;
             day_name;
             name_temp;
@@ -62,22 +51,28 @@ global int aoc_run_solutions(aoc_days days, string_list args) {
             split = string_split(&arena, name_temp,
                 (u8[]) { '.' }, 1);
             name_temp = split.first->str;
-//            Breakpoint;
+#endif
         }
 
-        buffer input = { 0 };
-        current_day_func(input);
+#define printf_solution_fmt(fmt, ...) fprintf(stdout, "%4s" fmt "", " ", ##__VA_ARGS__)
+#define printf(fmt, ...) printf_solution_fmt(fmt, __VA_ARGS__)
+        solution->part1(null_input);
+#undef printf
+
+        // NOTE(@jax): Hack
+        if (is_single_solution || *ptr == last_solution) {
+            break;
+        }
+
         ++ptr;
     }
 
-//    os_cmd_line_pause();
     return 0;
 }
-#endif
 
 /// String implementation
 
-global inline u32 string_length(char* str) {
+inline u32 string_length(char* str) {
     int result_count = 0;
     while (*str++) {
         ++result_count;
@@ -85,14 +80,14 @@ global inline u32 string_length(char* str) {
     return result_count;
 }
 
-global inline string make_string(u8* bytes, u64 size) {
+inline string make_string(u8* bytes, u64 size) {
     string result = {0};
     result.data = bytes;
     result.count = size;
     return result;
 }
 
-global inline string string_copy(memory_arena* arena, string str) {
+inline string string_copy(memory_arena* arena, string str) {
     string result = {0};
     result.data = arena_push_copy(arena, str.count, str.data);
     result.count = str.count;
@@ -100,37 +95,37 @@ global inline string string_copy(memory_arena* arena, string str) {
     return result;
 }
 
-global string make_string_range(u8* first, u8* one_past_last) {
+string make_string_range(u8* first, u8* one_past_last) {
     string result = make_string(first, (u64)(one_past_last-first));
     return result;
 }
 
-global inline string string_chop(string str, u64 count) {
+inline string string_chop(string str, u64 count) {
     u64 chop_amnt = Minimum(count, str.count);
     string result = {str.data, str.count - chop_amnt};
     return result;
 }
 
-global inline string string_substring(string str, string_range range) {
+inline string string_substring(string str, string_range range) {
     string result = {(u8*)str.data + range.start, range.end};
     return result;
 }
 
-global void string_list_push(memory_arena* arena, string_list* list, string str) {
+void string_list_push(memory_arena* arena, string_list* list, string str) {
     string_node* node = arena_push_struct(arena, string_node);
     node->str = string_copy(arena, str);
 
     string_list_push_node(list, node);
 }
 
-global void string_list_push_node(string_list* list, string_node* node) {
+void string_list_push_node(string_list* list, string_node* node) {
     string str = node->str;
-    SLLPushBack_Queue(list->first, list->last, node);
-    list->total_size = str.count; 
+    SLLQueuePushBack(list->first, list->last, node);
+    list->total_size += str.count; 
     ++list->count;
 }
 
-global string string_concat(memory_arena* arena, string_list* list) {
+string string_concat(memory_arena* arena, string_list* list) {
     string result = {0};
 
     u64 size = list->total_size;
@@ -138,17 +133,19 @@ global string string_concat(memory_arena* arena, string_list* list) {
     u8* write_ptr = data;
     for (string_node* at = list->first; at; at = at->next) {
         memcpy(write_ptr, at->str.data, at->str.count);
+        size += at->str.count;
         write_ptr += at->str.count;
     }
 
+    *write_ptr = 0;
+
     result.data = data;
-    result.count = string_length((char*)data);
-    result.data[result.count] = 0;
+    result.count = list->total_size;
     return result;
 }
 
 // basically is strstr, tokenizes strings based on provided delims
-global string_list string_split(memory_arena* arena, string str, u8* split_bytes, u32 split_count) {
+string_list string_split(memory_arena* arena, string str, u8* split_bytes, u32 split_count) {
     split_bytes;
     split_count;
     arena;
